@@ -2,39 +2,44 @@ name: sdk-python release
 
 # Only meaningful once this package lives in its own public repo — GitHub reads workflows from the
 # repo root, so this file is inert inside the qed-proof-sdk monorepo today. On the public repo, a
-# `v*` tag builds and publishes to PyPI via trusted publishing (no stored token).
+# `sdk-python-v*` tag builds and publishes to PyPI via trusted publishing (no stored token).
 on:
   push:
     tags:
-      - "v*"
+      - "sdk-python-v*"   # the tag the gated export writes (scripts/oss_export.py --package sdk-python)
 
 permissions:
   contents: read
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Tag must match the package version
+        run: |
+          v=$(sed -nE 's/^version = "([^"]+)"/\1/p' pyproject.toml)
+          test "sdk-python-v$v" = "${GITHUB_REF_NAME}" || { echo "::error::tag ${GITHUB_REF_NAME} but pyproject.toml is $v"; exit 1; }
+          grep -q "__version__ = \"$v\"" src/qed_proof/__init__.py || { echo "::error::__version__ is not $v"; exit 1; }
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Run tests
         run: uv run --extra test --extra anchor pytest -q
       - name: Build sdist and wheel
         run: uv build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dist
           path: dist/
 
   publish:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: pypi
     permissions:
       id-token: write  # trusted publishing (OIDC) — no API token stored
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: dist
           path: dist/

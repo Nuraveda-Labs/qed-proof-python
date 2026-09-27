@@ -3,7 +3,12 @@
 All notable changes to `qed-proof` are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] - 2026-09-26
+## [0.1.1] - 2026-09-27
+
+The first version published to PyPI. 0.1.0 was tagged on the public repository but never
+published; 0.1.1 has the same library code, released through the gated trusted-publishing workflow.
+
+## [0.1.0] - 2026-09-26 (never published)
 
 Initial release.
 

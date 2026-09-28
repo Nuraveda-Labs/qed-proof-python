@@ -3,6 +3,12 @@
 All notable changes to `qed-proof` are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-09-28
+
+### Fixed
+
+- `get_claim` and `get_receipt` (sync and async) URL-encode the id, so an id containing `/`, `?` or `#` can't change the request path.
+
 ## [0.1.1] - 2026-09-27
 
 The first version published to PyPI. 0.1.0 was tagged on the public repository but never

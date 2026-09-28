@@ -279,3 +279,39 @@ async def test_async_iter_claims_follows_next_cursor_across_two_pages_then_stops
 
     assert [c.claim_id for c in claims] == ["c1", "c2", "c3"]
     assert calls == [None, "page2"]
+
+
+def test_get_claim_and_receipt_url_encode_path_parameters():
+    seen_paths = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_paths.append(request.url.raw_path.decode("ascii"))
+        if "/v1/claims/" in request.url.path:
+            return httpx.Response(200, json=_claim_row("c/1?a=b"))
+        return httpx.Response(200, json={"receipt_id": "r/1#x"})
+
+    qp = _client(handler)
+    res_claim = qp.get_claim("c/1?a=b")
+    assert res_claim.claim_id == "c/1?a=b"
+    res_rcpt = qp.get_receipt("r/1#x")
+    assert res_rcpt["receipt_id"] == "r/1#x"
+
+    assert seen_paths == ["/v1/claims/c%2F1%3Fa%3Db", "/v1/receipts/r%2F1%23x"]
+
+
+async def test_async_get_claim_and_receipt_url_encode_path_parameters():
+    seen_paths = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_paths.append(request.url.raw_path.decode("ascii"))
+        if "/v1/claims/" in request.url.path:
+            return httpx.Response(200, json=_claim_row("c/2?a=b"))
+        return httpx.Response(200, json={"receipt_id": "r/2#x"})
+
+    qp = _async_client(handler)
+    res_claim = await qp.get_claim("c/2?a=b")
+    assert res_claim.claim_id == "c/2?a=b"
+    res_rcpt = await qp.get_receipt("r/2#x")
+    assert res_rcpt["receipt_id"] == "r/2#x"
+
+    assert seen_paths == ["/v1/claims/c%2F2%3Fa%3Db", "/v1/receipts/r%2F2%23x"]

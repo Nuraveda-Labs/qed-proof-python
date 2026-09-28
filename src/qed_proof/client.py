@@ -11,6 +11,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -189,7 +190,7 @@ class QedProof:
         return ClaimResult._from_dict(resp.json())
 
     def get_claim(self, claim_id: str) -> ClaimResult:
-        resp = self._client.get(f"{self._base_url}/v1/claims/{claim_id}", headers=self._auth_headers())
+        resp = self._client.get(f"{self._base_url}/v1/claims/{quote(claim_id, safe='')}", headers=self._auth_headers())
         _raise_for_status(resp)
         return ClaimResult._from_dict(resp.json())
 
@@ -236,7 +237,7 @@ class QedProof:
             cursor = page.next_cursor
 
     def get_receipt(self, receipt_id: str) -> dict[str, Any]:
-        resp = self._client.get(f"{self._base_url}/v1/receipts/{receipt_id}")  # no auth: receipts are public
+        resp = self._client.get(f"{self._base_url}/v1/receipts/{quote(receipt_id, safe='')}")  # no auth: receipts are public
         _raise_for_status(resp)
         return resp.json()
 
@@ -287,7 +288,7 @@ class AsyncQedProof:
         return ClaimResult._from_dict(resp.json())
 
     async def get_claim(self, claim_id: str) -> ClaimResult:
-        resp = await self._client.get(f"{self._base_url}/v1/claims/{claim_id}", headers=self._auth_headers())
+        resp = await self._client.get(f"{self._base_url}/v1/claims/{quote(claim_id, safe='')}", headers=self._auth_headers())
         _raise_for_status(resp)
         return ClaimResult._from_dict(resp.json())
 
@@ -336,7 +337,7 @@ class AsyncQedProof:
             cursor = page.next_cursor
 
     async def get_receipt(self, receipt_id: str) -> dict[str, Any]:
-        resp = await self._client.get(f"{self._base_url}/v1/receipts/{receipt_id}")
+        resp = await self._client.get(f"{self._base_url}/v1/receipts/{quote(receipt_id, safe='')}")
         _raise_for_status(resp)
         return resp.json()
 

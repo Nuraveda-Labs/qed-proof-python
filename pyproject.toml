@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "qed-proof"
-version = "0.1.2"
+version = "0.1.3"
 description = "Python SDK for QED Proof: submit claims, fetch receipts, and verify them offline against the PoAW receipt spec."
 readme = "README.md"
 license = "Apache-2.0"
@@ -32,7 +32,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://docs.qedproof.site"
 Documentation = "https://docs.qedproof.site"
-Source = "https://github.com/Nuraveda-Labs/qed-proof-python"
+Source = "https://github.com/Nuraveda/qed-proof-python"
 
 [project.optional-dependencies]
 anchor = [

@@ -3,6 +3,13 @@
 All notable changes to `qed-proof` are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] - 2026-10-01
+
+### Changed
+
+- The source repository moved to `github.com/Nuraveda/qed-proof-python` (the old URL redirects). The
+  package's Source link now points there. No code changes.
+
 ## [0.1.2] - 2026-09-28
 
 ### Fixed

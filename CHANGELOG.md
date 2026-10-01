@@ -3,6 +3,21 @@
 All notable changes to `qed-proof` are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-10-01
+
+### Added
+
+- `verify_receipt` verifies **change entries** (`entry_kind: "change"`, SPEC §14): signed log entries for a change at a
+  destination that no claim explained, signed under their own domain. The report has `entry_kind="change"`, no verdict and
+  no `claim_digest` check.
+- `verify_receipt(receipt, keys, pipeline=...)`: pass the pipeline document to check a receipt's or change entry's
+  `policy` (SPEC §15.2). The report gains a `policy` check: `True`, `False`, or `"not_checked"` when no document is given.
+- `pipeline_digest(pipeline)`.
+
+### Changed
+
+- Accepts `poaw/0.1` and `poaw/0.2` receipts. Reports for receipts that use nothing new are unchanged.
+
 ## [0.1.3] - 2026-10-01
 
 ### Changed

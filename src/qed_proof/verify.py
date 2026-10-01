@@ -1,4 +1,4 @@
-"""Offline (and optionally on-chain) verification of a PoAW receipt (poaw/0.1).
+"""Offline (and optionally on-chain) verification of a PoAW receipt (poaw/0.1 and poaw/0.2).
 
 This is a port of ``oss/spec/tools/check.py``'s ``check()`` function, not an import of it — the SDK
 is self-contained and carries its own copy of the primitives (``_primitives.py``) and the anchor
@@ -20,15 +20,28 @@ from . import _primitives as ref
 __all__ = ["VerifyReport", "verify_receipt"]
 
 
-@functools.lru_cache(maxsize=1)
-def _schema() -> dict:
-    text = resources.files("qed_proof").joinpath("receipt.schema.json").read_text(encoding="utf-8")
+@functools.lru_cache(maxsize=None)
+def _schema(name: str = "receipt") -> dict:
+    text = resources.files("qed_proof").joinpath(f"{name}.schema.json").read_text(encoding="utf-8")
     return json.loads(text)
 
 
-@functools.lru_cache(maxsize=1)
-def _validator() -> jsonschema.Draft202012Validator:
-    return jsonschema.Draft202012Validator(_schema())
+@functools.lru_cache(maxsize=None)
+def _validator(name: str = "receipt") -> jsonschema.Draft202012Validator:
+    return jsonschema.Draft202012Validator(_schema(name))
+
+
+def _check_policy(policy: Any, pipeline: Any) -> bool:
+    """SPEC §15.2: the document is valid, its id and version are the policy's, and its digest is the policy's."""
+    return bool(
+        isinstance(policy, dict)
+        and isinstance(pipeline, dict)
+        and not ref.has_float(pipeline)
+        and not list(_validator("pipeline").iter_errors(pipeline))
+        and pipeline.get("id") == policy.get("pipeline_id")
+        and pipeline.get("version") == policy.get("pipeline_version")
+        and ref.pipeline_digest(pipeline) == policy.get("digest")
+    )
 
 
 @dataclass(frozen=True)
@@ -41,11 +54,12 @@ class VerifyReport:
     achieved_trust_level: int
     verdict: str | None
     proven_by: int | None = None
+    entry_kind: str | None = None  # "change" for a change entry (SPEC §14); None for a receipt
     _anchor_checked: bool = field(default=False, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Exactly ``check.py``'s report dict shape: ``{"checks": {...}, "valid", "achieved_trust_level", "verdict"}``,
-        plus ``proven_by`` (present, even if null, whenever an on-chain anchor check actually ran — matching the
+        plus ``entry_kind`` (only for a change entry) and ``proven_by`` (present, even if null, whenever an on-chain anchor check actually ran — matching the
         reference, which only assigns ``report["proven_by"]`` in that branch)."""
         out: dict[str, Any] = {
             "checks": dict(self.checks),
@@ -53,15 +67,22 @@ class VerifyReport:
             "achieved_trust_level": self.achieved_trust_level,
             "verdict": self.verdict,
         }
+        if self.entry_kind is not None:
+            out["entry_kind"] = self.entry_kind
         if self._anchor_checked:
             out["proven_by"] = self.proven_by
         return out
 
 
-def verify_receipt(receipt: dict, keys: dict, rpc_url: str | None = None) -> VerifyReport:
+def verify_receipt(
+    receipt: dict, keys: dict, rpc_url: str | None = None, pipeline: dict | None = None
+) -> VerifyReport:
     """Verify a receipt against a keyset (as returned by ``GET /.well-known/poaw-keys.json`` or
     :meth:`QedProof.get_keys`). With ``rpc_url``, also checks the on-chain anchor (SPEC §8.4); without
-    it, an anchored receipt reports ``anchor: "not_checked_offline"``. Any doubt fails the check — an
+    it, an anchored receipt reports ``anchor: "not_checked_offline"``. Change entries (``entry_kind: "change"``,
+    SPEC §14) are verified under their own schema and signature domain and carry no claim digest or verdict.
+    If the body carries a ``policy``, ``pipeline`` (the pipeline document, SPEC §15.2) is checked against it;
+    without ``pipeline`` the ``policy`` check reports ``"not_checked"`` and does not fail the entry. Any doubt fails the check — an
     RPC error, a decode error or a mismatch all give ``"unproven"``-shaped results, never a pass.
 
     Requires the ``qed-proof[anchor]`` extra when ``rpc_url`` is given.
@@ -72,7 +93,10 @@ def verify_receipt(receipt: dict, keys: dict, rpc_url: str | None = None) -> Ver
     body = receipt.get("body", {}) if isinstance(receipt, dict) else {}
     version = str(body.get("spec_version", ""))
     c["spec_version"] = version.split("/")[0] == "poaw" and version.split("/")[-1].split(".")[0] == "0"
-    c["schema"] = not list(_validator().iter_errors(receipt))
+    kind = ref.entry_kind(body)
+    is_change = kind == "change"
+    # §14: no entry_kind is a receipt, "change" is a change entry, anything else is not an entry this spec defines.
+    c["schema"] = (kind is None or is_change) and not list(_validator("change" if is_change else "receipt").iter_errors(receipt))
     c["integers_only"] = not ref.has_float(receipt)
 
     sig = receipt.get("signature", {}) if isinstance(receipt, dict) else {}
@@ -86,9 +110,12 @@ def verify_receipt(receipt: dict, keys: dict, rpc_url: str | None = None) -> Ver
         and (key.get("revoked_at") is None or issued < key["revoked_at"])
     )
     c["key"] = key_ok
-    c["signature"] = bool(key_ok and ref.verify_signature(ref.b64u_decode(key["public_key"]), body, sig.get("value", "")))
-    claim = body.get("claim", {})
-    c["claim_digest"] = isinstance(claim, dict) and claim.get("claim_digest") == ref.claim_digest(claim)
+    domain = ref.CHANGE_SIG_DOMAIN if is_change else ref.SIG_DOMAIN
+    c["signature"] = bool(
+        key_ok and ref.verify_signature(ref.b64u_decode(key["public_key"]), body, sig.get("value", ""), domain))
+    if not is_change:  # a change entry has no claim (§14.1)
+        claim = body.get("claim", {})
+        c["claim_digest"] = isinstance(claim, dict) and claim.get("claim_digest") == ref.claim_digest(claim)
 
     proof = receipt.get("proof")
     if proof is None:
@@ -118,14 +145,20 @@ def verify_receipt(receipt: dict, keys: dict, rpc_url: str | None = None) -> Ver
         proven_by = a["proven_by"]
         anchor_checked = True
 
-    required = ("spec_version", "schema", "integers_only", "key", "signature", "claim_digest")
-    valid = all(c[k] is True for k in required) and c["inclusion"] in (True, "absent")
+    # §15.2: only present when the body carries a policy. Without the pipeline document it is "not_checked".
+    policy = body.get("policy")
+    if policy is not None:
+        c["policy"] = "not_checked" if pipeline is None else _check_policy(policy, pipeline)
+
+    required = ("spec_version", "schema", "integers_only", "key", "signature") + (() if is_change else ("claim_digest",))
+    valid = (all(c[k] is True for k in required) and c["inclusion"] in (True, "absent")
+             and c.get("policy", True) in (True, "not_checked"))
     # SPEC §7: report the ACHIEVED level. L2 needs inclusion AND an anchor verified on-chain (rpc_url given); offline
     # the ceiling is 1.
     achieved = (2 if c["inclusion"] is True and c["anchor"] is True else 1) if valid else 0
-    verdict = body.get("verdict", {}).get("value") if valid else None
+    verdict = body.get("verdict", {}).get("value") if valid and not is_change else None
 
     return VerifyReport(
         checks=c, valid=valid, achieved_trust_level=achieved, verdict=verdict,
-        proven_by=proven_by, _anchor_checked=anchor_checked,
+        proven_by=proven_by, entry_kind="change" if is_change else None, _anchor_checked=anchor_checked,
     )

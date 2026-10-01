@@ -712,7 +712,7 @@ wheels = [
 
 [[package]]
 name = "qed-proof"
-version = "0.1.3"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },

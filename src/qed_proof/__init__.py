@@ -22,9 +22,10 @@ from .client import (
     QedProofRateLimited,
     QedProofTimeout,
 )
+from ._primitives import pipeline_digest
 from .verify import VerifyReport, verify_receipt
 
-__version__ = "0.1.3"
+__version__ = "0.2.0"
 
 __all__ = [
     "Action",
@@ -38,5 +39,6 @@ __all__ = [
     "QedProofTimeout",
     "VerifyReport",
     "verify_receipt",
+    "pipeline_digest",
     "__version__",
 ]
